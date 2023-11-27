@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var memoryPackageCache *evaluator.PackageCache
@@ -91,20 +92,24 @@ func processPartition(part string, i int) {
 				updateData := getUpdateData(u, as, part, i)
 				latestApplicable, latestInstallable := getEvraApplicability(updateData)
 				applicableID, installableID := getPackageIDs(u, i, latestApplicable, latestInstallable)
-				if applicableID != 0 && installableID != 0 {
+				if applicableID != 0 || installableID != 0 {
 					// insert ids to system_package2
-					err := tasks.WithTx(func(db *gorm.DB) error {
-						return db.Table("system_package2").
-							Where("installable_id IS NULL AND applicable_id IS NULL").
-							Save(models.SystemPackage{
-								RhAccountID:   as.RhAccountID,
-								SystemID:      as.SystemID,
-								PackageID:     u.PackageID,
-								NameID:        u.NameID,
-								InstallableID: &installableID,
-								ApplicableID:  &applicableID,
-							}).Error
-					})
+					toInsert := models.SystemPackage{
+						RhAccountID: as.RhAccountID,
+						SystemID:    as.SystemID,
+						PackageID:   u.PackageID,
+						NameID:      u.NameID,
+					}
+					if installableID != 0 {
+						toInsert.InstallableID = &installableID
+					}
+					if applicableID != 0 {
+						toInsert.ApplicableID = &applicableID
+					}
+					err := tx.Clauses(clause.OnConflict{DoNothing: true}).
+						Table("system_package2").
+						Where("installable_id IS NULL AND applicable_id IS NULL").
+						Save(toInsert).Error
 					if err != nil {
 						utils.LogWarn("#", i, "Failed to update system_package2")
 					}
