@@ -350,8 +350,9 @@ func updateSystemPlatform(tx *gorm.DB, inventoryID string, accountID int, host *
 		shouldUpdateRepos = true
 	}
 
-	// Skip updating yum_updates if the checksum haven't changed.
-	if oldChecksums["yum_checksum"] != yumChecksum {
+	// Skip updating yum_updates if the checksum hasn't changed.
+	// or if yumUpdates is nil (error in getting/parsing or recalc message)
+	if yumUpdates != nil && oldChecksums["yum_checksum"] != yumChecksum {
 		colsToUpdate = append(colsToUpdate, "yum_updates")
 	}
 
